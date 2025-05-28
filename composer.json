@@ -1,0 +1,14 @@
+{
+  "name": "tu-vendor/woocommerce4agc",
+  "description": "Integración WooCommerce ↔ ERP AGC",
+  "type": "wordpress-plugin",
+  "require": {
+	"php": ">=7.4",
+	"guzzlehttp/guzzle": "^7.0"
+  },
+  "autoload": {
+	"psr-4": {
+	  "WC4AGC\\": "includes/"
+	}
+  }
+}
