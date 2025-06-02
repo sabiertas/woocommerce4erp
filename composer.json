@@ -1,14 +1,28 @@
 {
-  "name": "tu-vendor/woocommerce4agc",
-  "description": "Integración WooCommerce ↔ ERP AGC",
+  "name": "ajjulian/woocommerce4agc",
+  "description": "Integra WooCommerce con el ERP propietario AGC y servicio de licencias",
   "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+	{
+	  "name": "Ángel Julian",
+	  "email": "angel.julian@gmail.com"
+	}
+  ],
   "require": {
 	"php": ">=7.4",
-	"guzzlehttp/guzzle": "^7.0"
+	"composer/installers": "^2.0",
+	"guzzlehttp/guzzle": "^7.0",
+	"monolog/monolog": "^2.0"
   },
   "autoload": {
 	"psr-4": {
 	  "WC4AGC\\": "includes/"
+	}
+  },
+  "config": {
+	"allow-plugins": {
+	  "composer/installers": true
 	}
   }
 }

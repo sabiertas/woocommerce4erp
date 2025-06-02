@@ -1,0 +1,89 @@
+.wc4agc-dashboard-cards {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.wc4agc-dashboard-card {
+    flex: 1;
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 20px;
+    text-align: center;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.wc4agc-dashboard-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.wc4agc-dashboard-card .dashicons {
+    font-size: 32px;
+    margin-bottom: 10px;
+    color: #2271b1;
+}
+
+.wc4agc-dashboard-card h3 {
+    margin: 0 0 10px;
+    color: #1d2327;
+}
+
+.wc4agc-dashboard-card p {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #555;
+}
+
+.wc4agc-dashboard-card form {
+    margin-top: 15px;
+}
+
+.wc4agc-dashboard-card .button {
+    width: 100%;
+}
+
+.wc4agc-logs-container {
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 20px;
+    border-radius: 4px;
+}
+
+.wc4agc-logs-container pre {
+    max-height: 400px;
+    overflow: auto;
+    background: #f6f7f7;
+    padding: 15px;
+    border: 1px solid #e2e4e7;
+    border-radius: 3px;
+}
+
+.wc4agc-settings-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.wc4agc-settings-section h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.wc4agc-settings-section .form-table th {
+    width: 200px;
+}
+
+.wc4agc-settings-section .form-table td {
+    padding: 15px 10px;
+}
+
+.wc4agc-settings-section .form-table input[type="text"],
+.wc4agc-settings-section .form-table input[type="url"] {
+    width: 100%;
+    max-width: 400px;
+} 
