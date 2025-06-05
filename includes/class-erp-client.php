@@ -5,27 +5,33 @@ namespace WC4AGC;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use WC_Logger;
+use GuzzleHttp\Exception\GuzzleException;
+use WC4AGC\Logger;
+use WC4AGC\Cache;
+use WC4AGC\Constants;
 
-if ( ! class_exists( 'ERP_Client' ) ) :
+if ( ! class_exists( 'WC4AGC_ERP_Client' ) ) :
 	
-class ERP_Client {
+class WC4AGC_ERP_Client {
 	private static $instance;
 	private $http;
 	private $endpoint;
 	private $api_key;
 	private $logger;
+	private $cache;
 
 	private function __construct() {
-		$this->endpoint = get_option( 'wc4agc_erp_endpoint', '' );
-		$this->api_key  = get_option( 'wc4agc_erp_api_key', '' );
-		$this->logger   = new WC_Logger();
+		$this->endpoint = get_option(Constants::OPTION_ERP_ENDPOINT, '');
+		$this->api_key = get_option(Constants::OPTION_ERP_API_KEY, '');
+		$this->logger = Logger::instance();
+		$this->cache = Cache::instance();
 
 		$this->http = new Client([
-			'base_uri' => untrailingslashit( $this->endpoint ) . '/',
-			'timeout'  => 30,
-			'headers'  => [
+			'base_uri' => untrailingslashit($this->endpoint) . '/',
+			'timeout' => Constants::API_TIMEOUT,
+			'headers' => [
 				'Authorization' => 'Bearer ' . $this->api_key,
-				'Accept'        => 'application/json',
+				'Accept' => 'application/json',
 			],
 		]);
 	}
@@ -137,6 +143,88 @@ class ERP_Client {
 	 */
 	public function getProductBySku( $sku ) {
 		return $this->request( 'GET', '/products', [ 'query' => [ 'sku' => $sku ] ] );
+	}
+
+	/**
+	 * Obtiene los productos del ERP
+	 *
+	 * @return array|false
+	 */
+	public function get_products() {
+		$cache_key = $this->cache->generate_key('erp_products');
+		
+		// Intentar obtener del caché
+		$cached = $this->cache->get($cache_key);
+		if ($cached !== false) {
+			return $cached;
+		}
+
+		try {
+			$response = $this->http->get('/products', [
+				'query' => [
+					'fields' => '1,46,75' // SKU, parent_sku, precio_dolares
+				]
+			]);
+
+			if ($response->getStatusCode() !== 200) {
+				throw new \Exception('Error en la respuesta del ERP: ' . $response->getStatusCode());
+			}
+
+			$body = $response->getBody()->getContents();
+			$data = json_decode($body, true);
+			
+			if (!$data || !isset($data['data'])) {
+				throw new \Exception('Formato de respuesta inválido del ERP');
+			}
+
+			// Guardar en caché
+			$this->cache->set($cache_key, $data, Constants::CACHE_EXPIRATION);
+			
+			return $data;
+
+		} catch (GuzzleException $e) {
+			$this->logger->log('erp', 'Error al obtener productos: ' . $e->getMessage(), 'error');
+			throw new \Exception('Error al conectar con el ERP: ' . $e->getMessage());
+		} catch (\Exception $e) {
+			$this->logger->log('erp', 'Error al procesar respuesta: ' . $e->getMessage(), 'error');
+			throw $e;
+		}
+	}
+
+	/**
+	 * Obtiene un producto específico por SKU
+	 *
+	 * @param string $sku SKU del producto
+	 * @return array|false
+	 */
+	public function get_product($sku) {
+		try {
+			$response = $this->http->get('/products', [
+				'query' => [
+					'sku' => $sku
+				]
+			]);
+
+			if ($response->getStatusCode() !== 200) {
+				throw new \Exception('Error en la respuesta del ERP: ' . $response->getStatusCode());
+			}
+
+			$body = $response->getBody()->getContents();
+			$data = json_decode($body, true);
+			
+			if (!$data || !isset($data['data']) || empty($data['data'])) {
+				return false;
+			}
+
+			return $data['data'][0];
+
+		} catch (GuzzleException $e) {
+			$this->logger->log('erp', 'Error al obtener producto: ' . $e->getMessage(), 'error');
+			throw new \Exception('Error al conectar con el ERP: ' . $e->getMessage());
+		} catch (\Exception $e) {
+			$this->logger->log('erp', 'Error al procesar respuesta: ' . $e->getMessage(), 'error');
+			throw $e;
+		}
 	}
 }
 
