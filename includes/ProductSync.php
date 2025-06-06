@@ -40,6 +40,7 @@ class ProductSync {
             $created = 0;
             $skipped = 0;
             $errors = 0;
+            $error_msgs = [];
             foreach ($products as $product) {
                 try {
                     $sku = $product[1] ?? null;
@@ -98,6 +99,7 @@ class ProductSync {
                     }
                     self::$logger->log('products', $msg, 'error');
                     $errors++;
+                    $error_msgs[] = $msg;
                 }
             }
             self::$logger->log('products', sprintf('Sincronización completada: %d actualizados, %d creados, %d omitidos, %d errores', $updated, $created, $skipped, $errors), 'info');
@@ -106,7 +108,8 @@ class ProductSync {
                 'updated' => $updated,
                 'created' => $created,
                 'skipped' => $skipped,
-                'errors' => $errors
+                'errors' => $errors,
+                'error_msgs' => $error_msgs
             ];
         } catch (\Exception $e) {
             $msg = 'Error en sincronización: ' . $e->getMessage();

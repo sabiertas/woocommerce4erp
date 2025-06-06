@@ -19,6 +19,7 @@ class CategorySync {
             $created = 0;
             $skipped = 0;
             $errors = 0;
+            $error_msgs = [];
             foreach ($categories as $category) {
                 try {
                     $cat_id = $category['id'] ?? null;
@@ -41,6 +42,7 @@ class CategorySync {
                     }
                     self::$logger->log('categories', $msg, 'error');
                     $errors++;
+                    $error_msgs[] = $msg;
                 }
             }
             self::$logger->log('categories', sprintf('Sincronización completada: %d actualizadas, %d creadas, %d omitidas, %d errores', $updated, $created, $skipped, $errors), 'info');
@@ -49,7 +51,8 @@ class CategorySync {
                 'updated' => $updated,
                 'created' => $created,
                 'skipped' => $skipped,
-                'errors' => $errors
+                'errors' => $errors,
+                'error_msgs' => $error_msgs
             ];
         } catch (\Exception $e) {
             $msg = 'Error en sincronización: ' . $e->getMessage();

@@ -278,8 +278,10 @@ final class WC4AGC_Plugin {
     }
 
     private function render_dashboard_tab() {
+        $debug = get_option(\WC4AGC\Constants::OPTION_DEBUG_MODE, '0') === '1';
+        $sync_summary = null;
         echo '<div class="wc4agc-dashboard-cards">';
-        foreach([
+        foreach ([
             ['update','Sincronizar stock','sync_stock',Constants::NONCE_SYNC_STOCK,'Obtener stock desde ERP a WooCommerce'],
             ['tag','Sincronizar precios','sync_prices',Constants::NONCE_SYNC_PRICES,'Obtener precios desde ERP a WooCommerce'],
             ['products','Sincronizar productos','sync_products',Constants::NONCE_SYNC_PRODUCTS,'Obtener productos desde ERP a WooCommerce'],
@@ -299,20 +301,20 @@ final class WC4AGC_Plugin {
 
         // Procesar acciones
         if (isset($_POST['sync_stock']) && check_admin_referer('sync_stock', Constants::NONCE_SYNC_STOCK)) {
-            StockSync::sync_all();
+            $sync_summary = StockSync::sync_all();
             $this->logger->log('stock', 'Sincronización de stock iniciada manualmente', 'info');
             echo '<div class="updated notice notice-success wc4agc-notice"><p>Stock sincronizado.</p></div>';
         }
 
         if (isset($_POST['sync_prices']) && check_admin_referer('sync_prices', Constants::NONCE_SYNC_PRICES)) {
-            PriceSync::sync_all();
+            $sync_summary = PriceSync::sync_all();
             $this->logger->log('prices', 'Sincronización de precios iniciada manualmente', 'info');
             echo '<div class="updated notice notice-success wc4agc-notice"><p>Precios sincronizados.</p></div>';
         }
 
         if (isset($_POST['sync_products']) && check_admin_referer('sync_products', Constants::NONCE_SYNC_PRODUCTS)) {
             if (class_exists(ProductSync::class)) {
-                ProductSync::sync_all();
+                $sync_summary = ProductSync::sync_all();
                 $this->logger->log('products', 'Sincronización de productos iniciada manualmente', 'info');
                 echo '<div class="updated notice notice-success wc4agc-notice"><p>Productos sincronizados.</p></div>';
             } else {
@@ -322,12 +324,32 @@ final class WC4AGC_Plugin {
 
         if (isset($_POST['sync_categories']) && check_admin_referer('sync_categories', Constants::NONCE_SYNC_CATEGORIES)) {
             if (class_exists(CategorySync::class)) {
-                CategorySync::sync_all();
+                $sync_summary = CategorySync::sync_all();
                 $this->logger->log('categories', 'Sincronización de categorías iniciada manualmente', 'info');
                 echo '<div class="updated notice notice-success wc4agc-notice"><p>Categorías sincronizadas.</p></div>';
             } else {
                 echo '<div class="error notice notice-error wc4agc-notice"><p>Módulo categorías no implementado.</p></div>';
             }
+        }
+
+        // Mostrar resumen si debug activo y hay resultado
+        if ($debug && is_array($sync_summary)) {
+            echo '<div class="wc4agc-settings-section" style="margin-top:24px;">';
+            echo '<div class="notice notice-info wc4agc-notice" style="font-size:1.08em;">';
+            echo '<strong>Resumen de sincronización:</strong><br/>';
+            foreach ($sync_summary as $k => $v) {
+                if ($k === 'error_msgs' && is_array($v) && count($v) > 0) {
+                    echo '<br/><strong>Errores:</strong><ul style="margin:0 0 0 18px;">';
+                    foreach ($v as $err) {
+                        echo '<li style="font-size:0.97em;">' . esc_html($err) . '</li>';
+                    }
+                    echo '</ul>';
+                } elseif ($k !== 'error_msgs') {
+                    echo esc_html(ucfirst($k)) . ': <strong>' . esc_html(is_bool($v) ? ($v ? 'Sí' : 'No') : $v) . '</strong><br/>';
+                }
+            }
+            echo '</div>';
+            echo '</div>';
         }
     }
 
@@ -416,11 +438,12 @@ final class WC4AGC_Plugin {
             'products' => 'Productos',
             'categories' => 'Categorías'
         ];
-        $sel = isset($_GET['module']) && isset($modules[$_GET['module']]) ? $_GET['module'] : 'orders';
-        echo '<form method="get">';
+        $sel = isset($_GET['module']) && isset($modules[$_GET['module']]) ? $_GET['module'] : '';
+        echo '<form method="get" style="display:inline-block;margin-right:24px;">';
         echo '<input type="hidden" name="page" value="wc4agc-integration"/>';
         echo '<input type="hidden" name="tab" value="logs"/>';
         echo '<label>Ver logs de: <select name="module">';
+        echo '<option value="">Todos</option>';
         foreach($modules as $key=>$label) {
             $sel_attr = $key==$sel ? ' selected' : '';
             echo '<option value="' . esc_attr($key) . '"' . $sel_attr . '>' . esc_html($label) . '</option>';
@@ -428,11 +451,27 @@ final class WC4AGC_Plugin {
         echo '</select></label> ';
         submit_button('Mostrar', 'button-secondary', '', false);
         echo '</form>';
+        // Botón borrar logs
+        echo '<form method="post" style="display:inline-block;">';
+        echo '<input type="hidden" name="wc4agc_delete_logs" value="1" />';
+        echo '<input type="hidden" name="module" value="' . esc_attr($sel) . '" />';
+        submit_button('Borrar logs', 'delete', 'delete_logs', false, [ 'onclick' => 'return confirm(\'¿Seguro que quieres borrar los logs?\')' ]);
+        echo '</form>';
         echo '</div>';
-        $logs = $this->logger->get_recent_logs($sel);
+        // Procesar borrado
+        if (isset($_POST['wc4agc_delete_logs']) && current_user_can('manage_woocommerce')) {
+            $mod = !empty($_POST['module']) ? sanitize_key($_POST['module']) : null;
+            $deleted = $this->logger->delete_logs($mod);
+            if ($deleted > 0) {
+                echo '<div class="updated notice notice-success wc4agc-notice"><p>Se han borrado ' . esc_html($deleted) . ' archivos de logs.</p></div>';
+            } else {
+                echo '<div class="notice notice-warning wc4agc-notice"><p>No se encontraron logs para borrar.</p></div>';
+            }
+        }
+        $logs = $this->logger->get_recent_logs($sel ?: 'orders');
         if (empty($logs)) {
             echo '<div class="wc4agc-settings-section">';
-            echo '<p>No hay logs para ' . esc_html($modules[$sel]) . '.</p>';
+            echo '<p>No hay logs para ' . ($sel ? esc_html($modules[$sel]) : 'ningún módulo') . '.</p>';
             echo '</div>';
             return;
         }

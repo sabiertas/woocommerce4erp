@@ -39,6 +39,7 @@ class StockSync {
             $updated = 0;
             $skipped = 0;
             $errors = 0;
+            $error_msgs = [];
             foreach ($products as $product) {
                 try {
                     $sku = $product[1] ?? null;
@@ -83,6 +84,7 @@ class StockSync {
                     }
                     self::$logger->log('stock', $msg, 'error');
                     $errors++;
+                    $error_msgs[] = $msg;
                 }
             }
             self::$logger->log('stock', sprintf('Sincronización completada: %d actualizados, %d omitidos, %d errores', $updated, $skipped, $errors), 'info');
@@ -90,7 +92,8 @@ class StockSync {
                 'success' => true,
                 'updated' => $updated,
                 'skipped' => $skipped,
-                'errors' => $errors
+                'errors' => $errors,
+                'error_msgs' => $error_msgs
             ];
         } catch (\Exception $e) {
             $msg = 'Error en sincronización: ' . $e->getMessage();

@@ -87,4 +87,28 @@ class Logger {
             }
         }
     }
+    
+    /**
+     * Borra los logs de un módulo específico o todos si $module es null
+     * @param string|null $module
+     * @return int Número de archivos eliminados
+     */
+    public function delete_logs($module = null) {
+        $deleted = 0;
+        if ($module) {
+            $prefix = 'wc4agc_' . $module;
+            $pattern = $this->log_dir . '/' . $prefix . '-*.log';
+        } else {
+            $pattern = $this->log_dir . '/*.log';
+        }
+        $files = glob($pattern);
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                if (unlink($file)) {
+                    $deleted++;
+                }
+            }
+        }
+        return $deleted;
+    }
 } 
