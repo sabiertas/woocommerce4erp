@@ -11,6 +11,7 @@ class Constants {
     const OPTION_ERP_API_KEY = 'wc4agc_erp_api_key';
     const OPTION_LICENSE_ENDPOINT = 'wc4agc_license_endpoint';
     const OPTION_LICENSE_API_KEY = 'wc4agc_license_api_key';
+    const OPTION_DEBUG_MODE = 'wc4agc_debug_mode';
     
     // Nombres de nonces
     const NONCE_SYNC_STOCK = 'wc4agc_sync_stock';

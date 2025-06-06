@@ -25,97 +25,82 @@ class ProductSync {
 
     public static function sync_all() {
         self::init();
-        
+        $debug = get_option(\WC4AGC\Constants::OPTION_DEBUG_MODE, '0') === '1';
         try {
             self::$logger->log('products', 'Iniciando sincronización de productos', 'info');
-            
-            // Obtener productos del ERP
-            $response = self::$erp_client->get_products();
-            
-            if (!$response || !isset($response['data'])) {
-                throw new \Exception('No se pudieron obtener los productos del ERP');
+            $products = self::$erp_client->get_products();
+            if (!$products || !is_array($products)) {
+                $msg = 'No se pudieron obtener los productos del ERP';
+                if ($debug) {
+                    $msg .= ' | Consulta: get_products()';
+                }
+                throw new \Exception($msg);
             }
-
             $updated = 0;
             $created = 0;
             $skipped = 0;
             $errors = 0;
-
-            foreach ($response['data'] as $product) {
+            foreach ($products as $product) {
                 try {
-                    // Verificar campos requeridos
-                    if (empty($product['1'])) {
-                        self::$logger->log('products', 'Producto omitido: SKU vacío', 'warning');
+                    $sku = $product[1] ?? null;
+                    $name = $product[2] ?? '';
+                    $description = $product[3] ?? '';
+                    $price = isset($product[75]) ? floatval($product[75]) : 0;
+                    $stock = isset($product[42]) ? intval($product[42]) : null;
+                    $product_type = $product[78] ?? 100;
+                    if (empty($sku)) {
+                        $msg = 'Producto omitido: SKU vacío';
+                        if ($debug) {
+                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                        }
+                        self::$logger->log('products', $msg, 'warning');
                         $skipped++;
                         continue;
                     }
-
-                    $sku = sanitize_text_field($product['1']);
-                    $name = sanitize_text_field($product['2']);
-                    $description = sanitize_textarea_field($product['3']);
-                    $price = floatval($product['75']);
-                    $stock = intval($product['2']);
-
-                    // Buscar producto por SKU
                     $product_id = wc_get_product_id_by_sku($sku);
-                    
                     if ($product_id) {
-                        // Actualizar producto existente
                         $wc_product = wc_get_product($product_id);
-                        
                         if (!$wc_product) {
-                            throw new \Exception("No se pudo cargar el producto ID: $product_id");
+                            $msg = "No se pudo cargar el producto ID: $product_id";
+                            if ($debug) {
+                                $msg .= ' | SKU: ' . $sku . ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                            }
+                            throw new \Exception($msg);
                         }
-
                         $wc_product->set_name($name);
                         $wc_product->set_description($description);
                         $wc_product->set_regular_price($price);
-                        $wc_product->set_stock_quantity($stock);
-                        $wc_product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
+                        if ($stock !== null) {
+                            $wc_product->set_stock_quantity($stock);
+                            $wc_product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
+                        }
                         $wc_product->save();
-
                         $updated++;
                     } else {
-                        // Crear nuevo producto
                         $wc_product = new \WC_Product_Simple();
                         $wc_product->set_name($name);
                         $wc_product->set_description($description);
                         $wc_product->set_sku($sku);
                         $wc_product->set_regular_price($price);
-                        $wc_product->set_stock_quantity($stock);
-                        $wc_product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
+                        if ($stock !== null) {
+                            $wc_product->set_stock_quantity($stock);
+                            $wc_product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
+                        }
                         $wc_product->save();
-
                         $created++;
                     }
-
-                    // Limpiar caché
                     self::$cache->delete(self::$cache->generate_key('product', ['sku' => $sku]));
-
-                    self::$logger->log('products', sprintf(
-                        'Producto SKU %s procesado: %s',
-                        $sku,
-                        $product_id ? 'actualizado' : 'creado'
-                    ), 'info');
-
+                    self::$logger->log('products', sprintf('Producto SKU %s procesado: %s', $sku, $product_id ? 'actualizado' : 'creado'), 'info');
                 } catch (\Exception $e) {
-                    self::$logger->log('products', sprintf(
-                        'Error al procesar producto SKU %s: %s',
-                        $sku ?? 'N/A',
-                        $e->getMessage()
-                    ), 'error');
+                    $msg = sprintf('Error al procesar producto SKU %s: %s', $sku ?? 'N/A', $e->getMessage());
+                    if ($debug) {
+                        $msg .= isset($product) ? ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()' : '';
+                    }
+                    self::$logger->log('products', $msg, 'error');
                     $errors++;
                 }
             }
-
-            self::$logger->log('products', sprintf(
-                'Sincronización completada: %d actualizados, %d creados, %d omitidos, %d errores',
-                $updated,
-                $created,
-                $skipped,
-                $errors
-            ), 'info');
-
+            self::$logger->log('products', sprintf('Sincronización completada: %d actualizados, %d creados, %d omitidos, %d errores', $updated, $created, $skipped, $errors), 'info');
             return [
                 'success' => true,
                 'updated' => $updated,
@@ -123,9 +108,12 @@ class ProductSync {
                 'skipped' => $skipped,
                 'errors' => $errors
             ];
-
         } catch (\Exception $e) {
-            self::$logger->log('products', 'Error en sincronización: ' . $e->getMessage(), 'error');
+            $msg = 'Error en sincronización: ' . $e->getMessage();
+            if ($debug) {
+                $msg .= isset($product) ? ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()' : '';
+            }
+            self::$logger->log('products', $msg, 'error');
             return [
                 'success' => false,
                 'error' => $e->getMessage()

@@ -25,96 +25,79 @@ class StockSync {
 
     public static function sync_all() {
         self::init();
-        
+        $debug = get_option(\WC4AGC\Constants::OPTION_DEBUG_MODE, '0') === '1';
         try {
             self::$logger->log('stock', 'Iniciando sincronización de stock', 'info');
-            
-            // Obtener stock del ERP
-            $response = self::$erp_client->getStock();
-            
-            if (!$response || !isset($response['data'])) {
-                throw new \Exception('No se pudo obtener el stock del ERP');
+            $products = self::$erp_client->get_products();
+            if (!$products || !is_array($products)) {
+                $msg = 'No se pudieron obtener los productos del ERP';
+                if ($debug) {
+                    $msg .= ' | Consulta: get_products()';
+                }
+                throw new \Exception($msg);
             }
-
             $updated = 0;
             $skipped = 0;
             $errors = 0;
-
-            foreach ($response['data'] as $stock) {
+            foreach ($products as $product) {
                 try {
-                    // Verificar campos requeridos
-                    if (empty($stock['1']) || !isset($stock['2'])) {
-                        self::$logger->log('stock', sprintf(
-                            'Registro de stock omitido: SKU vacío o stock inválido',
-                            $stock['1'] ?? 'N/A'
-                        ), 'warning');
+                    $sku = $product[1] ?? null;
+                    $stock = isset($product[42]) ? intval($product[42]) : null;
+                    if (empty($sku) || $stock === null) {
+                        $msg = sprintf('Registro de stock omitido: SKU vacío o stock inválido', $sku ?? 'N/A');
+                        if ($debug) {
+                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                        }
+                        self::$logger->log('stock', $msg, 'warning');
                         $skipped++;
                         continue;
                     }
-
-                    $sku = sanitize_text_field($stock['1']);
-                    $quantity = intval($stock['2']);
-
-                    // Buscar producto por SKU
                     $product_id = wc_get_product_id_by_sku($sku);
-                    
                     if (!$product_id) {
-                        self::$logger->log('stock', sprintf(
-                            'Producto SKU %s no encontrado en WooCommerce',
-                            $sku
-                        ), 'warning');
+                        $msg = sprintf('Producto SKU %s no encontrado en WooCommerce', $sku);
+                        if ($debug) {
+                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                        }
+                        self::$logger->log('stock', $msg, 'warning');
                         $skipped++;
                         continue;
                     }
-
                     $wc_product = wc_get_product($product_id);
-                    
                     if (!$wc_product) {
-                        throw new \Exception("No se pudo cargar el producto ID: $product_id");
+                        $msg = "No se pudo cargar el producto ID: $product_id";
+                        if ($debug) {
+                            $msg .= ' | SKU: ' . $sku . ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                        }
+                        throw new \Exception($msg);
                     }
-
-                    // Actualizar stock
-                    $wc_product->set_stock_quantity($quantity);
-                    $wc_product->set_stock_status($quantity > 0 ? 'instock' : 'outofstock');
+                    $wc_product->set_stock_quantity($stock);
+                    $wc_product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
                     $wc_product->save();
-
-                    // Limpiar caché
                     self::$cache->delete(self::$cache->generate_key('product_stock', ['sku' => $sku]));
-
-                    self::$logger->log('stock', sprintf(
-                        'Stock actualizado para SKU %s: %d unidades',
-                        $sku,
-                        $quantity
-                    ), 'info');
-                    
+                    self::$logger->log('stock', sprintf('Stock actualizado para SKU %s: %d unidades', $sku, $stock), 'info');
                     $updated++;
-
                 } catch (\Exception $e) {
-                    self::$logger->log('stock', sprintf(
-                        'Error al actualizar stock SKU %s: %s',
-                        $sku ?? 'N/A',
-                        $e->getMessage()
-                    ), 'error');
+                    $msg = sprintf('Error al actualizar stock SKU %s: %s', $sku ?? 'N/A', $e->getMessage());
+                    if ($debug) {
+                        $msg .= isset($product) ? ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()' : '';
+                    }
+                    self::$logger->log('stock', $msg, 'error');
                     $errors++;
                 }
             }
-
-            self::$logger->log('stock', sprintf(
-                'Sincronización completada: %d actualizados, %d omitidos, %d errores',
-                $updated,
-                $skipped,
-                $errors
-            ), 'info');
-
+            self::$logger->log('stock', sprintf('Sincronización completada: %d actualizados, %d omitidos, %d errores', $updated, $skipped, $errors), 'info');
             return [
                 'success' => true,
                 'updated' => $updated,
                 'skipped' => $skipped,
                 'errors' => $errors
             ];
-
         } catch (\Exception $e) {
-            self::$logger->log('stock', 'Error en sincronización: ' . $e->getMessage(), 'error');
+            $msg = 'Error en sincronización: ' . $e->getMessage();
+            if ($debug) {
+                $msg .= isset($product) ? ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()' : '';
+            }
+            self::$logger->log('stock', $msg, 'error');
             return [
                 'success' => false,
                 'error' => $e->getMessage()

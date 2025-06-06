@@ -17,20 +17,18 @@ class ERPClient {
     private $api_key;
     private $logger;
     private $cache;
+    private $erp_tables;
 
     private function __construct() {
         $this->endpoint = get_option(Constants::OPTION_ERP_ENDPOINT, '');
         $this->api_key = get_option(Constants::OPTION_ERP_API_KEY, '');
         $this->logger = Logger::instance();
         $this->cache = Cache::instance();
+        $this->erp_tables = include __DIR__ . '/erp_tables.php';
 
         $this->http = new Client([
             'base_uri' => untrailingslashit($this->endpoint) . '/',
             'timeout' => Constants::API_TIMEOUT,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $this->api_key,
-                'Accept' => 'application/json',
-            ],
         ]);
     }
 
@@ -104,64 +102,41 @@ class ERPClient {
         return $this->request('POST', '/Control', ['query' => $payload]);
     }
 
+    /**
+     * Obtener un producto por SKU
+     */
     public function get_product($sku) {
-        try {
-            $response = $this->request('GET', '/products', [
-                'query' => [
-                    'sku' => $sku
-                ]
-            ]);
-            
-            if (!$response || !isset($response['data']) || empty($response['data'])) {
-                return false;
-            }
-
-            return $response['data'][0];
-
-        } catch (\Exception $e) {
-            $this->logger->log('erp', 'Error al obtener producto: ' . $e->getMessage(), 'error');
-            throw $e;
+        $table = $this->erp_tables['products'];
+        $params = [
+            'Tabla'    => $table['table'],
+            'Campos'   => json_encode([$table['fields']]),
+            'Texto'    => $sku,
+            'CamposB'  => $table['search_field'],
+            'token'    => $this->api_key,
+        ];
+        $result = $this->request('GET', 'listado', ['query' => $params]);
+        if (!$result || !isset($result['data']) || empty($result['data'])) {
+            return false;
         }
+        return $result['data'][0];
     }
 
+    /**
+     * Obtener todos los productos
+     */
     public function get_products() {
-        $cache_key = $this->cache->generate_key('erp_products');
-        
-        // Intentar obtener del caché
-        $cached = $this->cache->get($cache_key);
-        if ($cached !== false) {
-            return $cached;
+        $table = $this->erp_tables['products'];
+        $params = [
+            'Tabla'    => $table['table'],
+            'Campos'   => json_encode([$table['fields']]),
+            'Texto'    => '', // Sin filtro, traer todos
+            'CamposB'  => $table['search_field'],
+            'token'    => $this->api_key,
+        ];
+        $result = $this->request('GET', 'listado', ['query' => $params]);
+        if (!$result || !isset($result['data'])) {
+            return [];
         }
-
-        try {
-            $response = $this->http->get('/products', [
-                'query' => [
-                    'fields' => '1,46,75' // SKU, parent_sku, precio_dolares
-                ]
-            ]);
-
-            if ($response->getStatusCode() !== 200) {
-                throw new \Exception('Error en la respuesta del ERP: ' . $response->getStatusCode());
-            }
-
-            $body = $response->getBody()->getContents();
-            $data = json_decode($body, true);
-            
-            if (!$data || !isset($data['data'])) {
-                throw new \Exception('Formato de respuesta inválido del ERP');
-            }
-
-            // Guardar en caché
-            $this->cache->set($cache_key, $data, Constants::CACHE_EXPIRATION);
-            
-            return $data;
-
-        } catch (GuzzleException $e) {
-            $this->logger->log('erp', 'Error al obtener productos: ' . $e->getMessage(), 'error');
-            throw new \Exception('Error al conectar con el ERP: ' . $e->getMessage());
-        } catch (\Exception $e) {
-            $this->logger->log('erp', 'Error al procesar respuesta: ' . $e->getMessage(), 'error');
-            throw $e;
-        }
+        return $result['data'];
     }
 } 

@@ -190,6 +190,35 @@ final class WC4AGC_Plugin {
             'wc4agc-integration',
             'wc4agc_license_section'
         );
+
+        // Opción de depuración
+        register_setting('wc4agc_settings', Constants::OPTION_DEBUG_MODE, [
+            'sanitize_callback' => function($v){ return $v === '1' ? '1' : '0'; },
+            'type' => 'string',
+            'default' => '0'
+        ]);
+
+        add_settings_section(
+            'wc4agc_debug_section',
+            'Depuración y soporte',
+            function(){ echo '<p>Activa el modo depuración solo para soporte técnico. Mostrará información detallada en los mensajes de error, incluyendo la consulta enviada al ERP.</p>'; },
+            'wc4agc-integration'
+        );
+
+        add_settings_field(
+            Constants::OPTION_DEBUG_MODE,
+            'Modo depuración',
+            function(){
+                $v = get_option(Constants::OPTION_DEBUG_MODE, '0');
+                echo '<label class="wc4agc-switch">';
+                echo '<input type="checkbox" name="' . Constants::OPTION_DEBUG_MODE . '" value="1"' . ($v === '1' ? ' checked' : '') . ' />';
+                echo '<span class="wc4agc-slider"></span>';
+                echo '</label>';
+                echo '<span style="margin-left:16px;color:#d32f2f;font-size:0.98em;">No activar en producción salvo para soporte técnico.</span>';
+            },
+            'wc4agc-integration',
+            'wc4agc_debug_section'
+        );
     }
 
     public function register_admin_page() {
@@ -214,9 +243,16 @@ final class WC4AGC_Plugin {
         echo '<p class="description">Integra WooCommerce con el ERP AGC y gestiona licencias automáticamente.</p>';
 
         // Tabs
+        $tabs = [
+            'dashboard' => 'Panel',
+            'settings' => 'Ajustes',
+            'cronjobs' => 'Cronjobs',
+            'logs' => 'Logs',
+            'query' => 'Consultas'
+        ];
         $current_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'dashboard';
         echo '<nav class="nav-tab-wrapper wc4agc-tabs" style="margin-bottom:0;">';
-        foreach(['dashboard'=>'Panel','settings'=>'Ajustes','logs'=>'Logs','query'=>'Consultas'] as $tab=>$label) {
+        foreach($tabs as $tab=>$label) {
             $active = ($tab == $current_tab) ? ' nav-tab-active' : '';
             echo '<a href="' . esc_url(admin_url('admin.php?page=wc4agc-integration&tab=' . $tab)) . '" class="nav-tab' . $active . '">' . esc_html($label) . '</a>';
         }
@@ -227,6 +263,9 @@ final class WC4AGC_Plugin {
         echo '<div class="wc4agc-panel-section">';
         if ($current_tab == 'settings') {
             $this->render_settings_tab();
+        } elseif ($current_tab == 'cronjobs') {
+            // Contenido vacío de momento
+            echo '';
         } elseif ($current_tab == 'logs') {
             $this->render_logs_tab();
         } elseif ($current_tab == 'query') {
@@ -295,14 +334,74 @@ final class WC4AGC_Plugin {
     private function render_settings_tab() {
         echo '<form action="options.php" method="post">';
         settings_fields('wc4agc_settings');
-        // Sección ERP
+        // Sección ERP (manual, sin do_settings_sections global)
         echo '<div class="wc4agc-settings-section">';
-        do_settings_sections('wc4agc-integration');
+        global $wp_settings_sections, $wp_settings_fields;
+        $page = 'wc4agc-integration';
+        if (isset($wp_settings_sections[$page]['wc4agc_api_section'])) {
+            $section = $wp_settings_sections[$page]['wc4agc_api_section'];
+            echo '<h2 style="margin-top:0;">' . esc_html($section['title']) . '</h2>';
+            if ($section['callback']) call_user_func($section['callback'], $section);
+            if (isset($wp_settings_fields[$page]['wc4agc_api_section'])) {
+                echo '<table class="form-table">';
+                foreach ($wp_settings_fields[$page]['wc4agc_api_section'] as $field) {
+                    echo '<tr>';
+                    echo '<th scope="row">' . esc_html($field['title']) . '</th>';
+                    echo '<td>';
+                    call_user_func($field['callback'], $field['id']);
+                    echo '</td>';
+                    echo '</tr>';
+                }
+                echo '</table>';
+            }
+        }
         echo '</div>';
-        // Separador visual
+        // Separador visual entre ERP y Licencias
         echo '<div class="wc4agc-separator"></div>';
-        // Sección Licencias (solo el título y descripción, los campos ya los imprime do_settings_sections)
-        // (No imprimir tabla manual)
+        // Sección Licencias
+        echo '<div class="wc4agc-settings-section">';
+        if (isset($wp_settings_sections[$page]['wc4agc_license_section'])) {
+            $section = $wp_settings_sections[$page]['wc4agc_license_section'];
+            echo '<h2 style="margin-top:0;">' . esc_html($section['title']) . '</h2>';
+            if ($section['callback']) call_user_func($section['callback'], $section);
+            if (isset($wp_settings_fields[$page]['wc4agc_license_section'])) {
+                echo '<table class="form-table">';
+                foreach ($wp_settings_fields[$page]['wc4agc_license_section'] as $field) {
+                    echo '<tr>';
+                    echo '<th scope="row">' . esc_html($field['title']) . '</th>';
+                    echo '<td>';
+                    call_user_func($field['callback'], $field['id']);
+                    echo '</td>';
+                    echo '</tr>';
+                }
+                echo '</table>';
+            }
+        }
+        echo '</div>';
+        // Separador visual antes de la sección de depuración
+        echo '<div class="wc4agc-separator"></div>';
+        // Sección Depuración
+        echo '<div class="wc4agc-settings-section">';
+        if (isset($wp_settings_sections[$page]['wc4agc_debug_section'])) {
+            $section = $wp_settings_sections[$page]['wc4agc_debug_section'];
+            echo '<h2 style="margin-top:0;">' . esc_html($section['title']) . '</h2>';
+            if ($section['callback']) call_user_func($section['callback'], $section);
+            if (isset($wp_settings_fields[$page]['wc4agc_debug_section'])) {
+                echo '<table class="form-table">';
+                foreach ($wp_settings_fields[$page]['wc4agc_debug_section'] as $field) {
+                    echo '<tr>';
+                    echo '<th scope="row">' . esc_html($field['title']) . '</th>';
+                    echo '<td>';
+                    call_user_func($field['callback'], $field['id']);
+                    echo '</td>';
+                    echo '</tr>';
+                }
+                echo '</table>';
+            }
+        }
+        echo '</div>';
+        // Separador visual antes del botón
+        echo '<div class="wc4agc-separator"></div>';
         submit_button('Guardar cambios', 'button-primary');
         echo '</form>';
     }
@@ -373,8 +472,39 @@ final class WC4AGC_Plugin {
         if (isset($_POST['query_product']) && check_admin_referer('query_product', 'wc4agc_query_nonce')) {
             $sku = sanitize_text_field($_POST['product_sku']);
             $erp_client = \WC4AGC\ERPClient::instance();
+            $debug = get_option(\WC4AGC\Constants::OPTION_DEBUG_MODE, '0') === '1';
+            $endpoint = rtrim(get_option(\WC4AGC\Constants::OPTION_ERP_ENDPOINT, ''), '/');
+            $campos = '[[' . implode(',', [0,1,2,3,4,37,38,40,42,46,59,60,61,62,63,64,65,66,67,68,69,74,75,78]) . ']]';
+            $params = [
+                'Tabla'    => 31,
+                'Campos'   => $campos,
+                'Texto'    => $sku,
+                'CamposB'  => 1,
+                'token'    => get_option(\WC4AGC\Constants::OPTION_ERP_API_KEY, ''),
+            ];
+            $url = $endpoint . '/listado?Tabla=' . $params['Tabla'] . '&Campos=' . $campos . '&Texto=' . urlencode($params['Texto']) . '&CamposB=' . $params['CamposB'] . '&token=' . urlencode($params['token']);
+            $api_response = null;
+            $api_response_pretty = '';
             try {
                 $product = $erp_client->get_product($sku);
+                if ($debug) {
+                    try {
+                        $api_response = wp_remote_get($url);
+                        if (is_array($api_response) && isset($api_response['body'])) {
+                            $body = $api_response['body'];
+                            $json = json_decode($body, true);
+                            if (json_last_error() === JSON_ERROR_NONE) {
+                                $api_response_pretty = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+                            } else {
+                                $api_response_pretty = $body;
+                            }
+                        } else {
+                            $api_response_pretty = is_string($api_response) ? $api_response : print_r($api_response, true);
+                        }
+                    } catch (\Exception $e) {
+                        $api_response_pretty = $e->getMessage();
+                    }
+                }
                 if ($product) {
                     echo '<div class="wc4agc-query-results">';
                     echo '<h4>Resultados para SKU: ' . esc_html($sku) . '</h4>';
@@ -389,10 +519,44 @@ final class WC4AGC_Plugin {
                     echo '</tbody></table>';
                     echo '</div>';
                 } else {
-                    echo '<div class="notice notice-error wc4agc-notice"><p>No se encontró el producto en el ERP.</p></div>';
+                    echo '<div class="notice notice-error wc4agc-notice"><p>No se encontró el producto en el ERP.</p>';
+                    if ($debug) {
+                        echo '<pre style="margin-top:10px;font-size:0.98em;background:#fffbe7;border:1px solid #ffe082;padding:12px;border-radius:7px;">Consulta enviada: ' . esc_html(json_encode($params, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "\nURL: " . esc_html($url);
+                        if ($api_response_pretty) {
+                            echo "\nRespuesta API:\n" . esc_html($api_response_pretty);
+                        }
+                        echo '</pre>';
+                    }
+                    echo '</div>';
                 }
             } catch (\Exception $e) {
-                echo '<div class="notice notice-error wc4agc-notice"><p>Error al consultar el producto: ' . esc_html($e->getMessage()) . '</p></div>';
+                if ($debug) {
+                    try {
+                        $api_response = wp_remote_get($url);
+                        if (is_array($api_response) && isset($api_response['body'])) {
+                            $body = $api_response['body'];
+                            $json = json_decode($body, true);
+                            if (json_last_error() === JSON_ERROR_NONE) {
+                                $api_response_pretty = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+                            } else {
+                                $api_response_pretty = $body;
+                            }
+                        } else {
+                            $api_response_pretty = is_string($api_response) ? $api_response : print_r($api_response, true);
+                        }
+                    } catch (\Exception $ex) {
+                        $api_response_pretty = $ex->getMessage();
+                    }
+                }
+                echo '<div class="notice notice-error wc4agc-notice"><p>Error al consultar el producto: ' . esc_html($e->getMessage()) . '</p>';
+                if ($debug) {
+                    echo '<pre style="margin-top:10px;font-size:0.98em;background:#fffbe7;border:1px solid #ffe082;padding:12px;border-radius:7px;">Consulta enviada: ' . esc_html(json_encode($params, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "\nURL: " . esc_html($url);
+                    if ($api_response_pretty) {
+                        echo "\nRespuesta API:\n" . esc_html($api_response_pretty);
+                    }
+                    echo '</pre>';
+                }
+                echo '</div>';
             }
         }
         echo '</div>';
