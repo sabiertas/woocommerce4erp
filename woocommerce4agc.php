@@ -264,8 +264,7 @@ final class WC4AGC_Plugin {
         if ($current_tab == 'settings') {
             $this->render_settings_tab();
         } elseif ($current_tab == 'cronjobs') {
-            // Contenido vacío de momento
-            echo '';
+            $this->render_cronjobs_tab();
         } elseif ($current_tab == 'logs') {
             $this->render_logs_tab();
         } elseif ($current_tab == 'query') {
@@ -429,7 +428,7 @@ final class WC4AGC_Plugin {
     }
 
     private function render_logs_tab() {
-        echo '<div class="wc4agc-settings-section">';
+        echo '<div class="wc4agc-settings-section" style="display:flex;align-items:center;justify-content:space-between;">';
         $modules = [
             'orders' => 'Pedidos',
             'licenses' => 'Licencias',
@@ -451,11 +450,11 @@ final class WC4AGC_Plugin {
         echo '</select></label> ';
         submit_button('Mostrar', 'button-secondary', '', false);
         echo '</form>';
-        // Botón borrar logs
-        echo '<form method="post" style="display:inline-block;">';
+        // Botón borrar logs alineado a la derecha
+        echo '<form method="post" style="margin-left:auto;">';
         echo '<input type="hidden" name="wc4agc_delete_logs" value="1" />';
         echo '<input type="hidden" name="module" value="' . esc_attr($sel) . '" />';
-        submit_button('Borrar logs', 'delete', 'delete_logs', false, [ 'onclick' => 'return confirm(\'¿Seguro que quieres borrar los logs?\')' ]);
+        submit_button('Borrar logs', 'wc4agc-delete-logs', 'delete_logs', false, [ 'onclick' => 'return confirm(\'¿Seguro que quieres borrar los logs?\')' ]);
         echo '</form>';
         echo '</div>';
         // Procesar borrado
@@ -600,6 +599,87 @@ final class WC4AGC_Plugin {
         }
         echo '</div>';
         echo '</div>';
+    }
+
+    private function render_cronjobs_tab() {
+        // Definición de cronjobs (puedes ampliar este array en el futuro)
+        $cronjobs = [
+            [
+                'id' => 'products',
+                'name' => 'Sincronización de productos',
+                'desc' => 'Actualiza el catálogo de productos desde el ERP automáticamente.',
+                'option_enabled' => 'wc4agc_cron_products_enabled',
+                'option_freq' => 'wc4agc_cron_products_freq',
+                'option_unit' => 'wc4agc_cron_products_unit',
+                'implemented' => true,
+                'last_sync' => get_option('wc4agc_cron_products_last', ''),
+                'next_sync' => get_option('wc4agc_cron_products_next', ''),
+                'last_count' => get_option('wc4agc_cron_products_last_count', ''),
+            ],
+            // Puedes añadir más cronjobs aquí...
+        ];
+        $units = [ 'minutes' => 'minutos', 'hours' => 'horas', 'days' => 'días' ];
+        echo '<form method="post">';
+        echo '<div class="wc4agc-cronjobs-list">';
+        foreach ($cronjobs as $cron) {
+            $enabled = get_option($cron['option_enabled'], '0') === '1';
+            $freq = get_option($cron['option_freq'], '1');
+            $unit = get_option($cron['option_unit'], 'hours');
+            $is_implemented = $cron['implemented'];
+            $class = $is_implemented ? '' : ' style="opacity:0.5;filter:grayscale(0.7);"';
+            echo '<div class="wc4agc-cronjob-item"' . $class . '>';
+            // Primera línea: nombre, descripción y badge
+            echo '<div style="display:flex;align-items:center;gap:16px;">';
+            echo '<div style="flex:1;display:flex;align-items:baseline;gap:12px;">';
+            echo '<span style="font-size:1.18em;font-weight:700;">' . esc_html($cron['name']) . '</span>';
+            echo '<span style="font-size:0.98em;font-weight:400;color:#555;margin-left:0;">' . esc_html($cron['desc']) . '</span>';
+            echo '<span class="wc4agc-badge ' . ($enabled ? 'wc4agc-badge-on' : 'wc4agc-badge-off') . '">' . ($enabled ? 'Activado' : 'Desactivado') . '</span>';
+            echo '</div>';
+            // Switch de activación
+            echo '<label class="wc4agc-switch" style="margin-left:18px;">';
+            echo '<input type="checkbox" name="cron_enabled[' . esc_attr($cron['id']) . ']" value="1"' . ($enabled ? ' checked' : '') . ($is_implemented ? '' : ' disabled') . ' />';
+            echo '<span class="wc4agc-slider"></span>';
+            echo '</label>';
+            // Frecuencia
+            echo '<span style="margin-left:18px;">';
+            echo '<input type="number" min="1" max="999" name="cron_freq[' . esc_attr($cron['id']) . ']" value="' . esc_attr($freq) . '" style="width:60px;"' . ($is_implemented ? '' : ' disabled') . ' /> ';
+            echo '<select name="cron_unit[' . esc_attr($cron['id']) . ']"' . ($is_implemented ? '' : ' disabled') . '>';
+            foreach ($units as $k=>$v) {
+                $sel = $unit === $k ? ' selected' : '';
+                echo '<option value="' . esc_attr($k) . '"' . $sel . '>' . esc_html($v) . '</option>';
+            }
+            echo '</select>';
+            echo '</span>';
+            echo '</div>';
+            // Segunda línea: fechas y recuento
+            echo '<div style="font-size:0.97em;color:#444;margin-top:6px;">';
+            echo 'Última sincronización: <strong>' . ($cron['last_sync'] ? esc_html($cron['last_sync']) : '-') . '</strong> &nbsp;|&nbsp; ';
+            echo 'Próxima: <strong>' . ($cron['next_sync'] ? esc_html($cron['next_sync']) : '-') . '</strong> &nbsp;|&nbsp; ';
+            echo 'Elementos sincronizados: <strong>' . ($cron['last_count'] !== '' ? esc_html($cron['last_count']) : '-') . '</strong>';
+            echo '</div>';
+            echo '</div>';
+        }
+        echo '</div>';
+        submit_button('Guardar cambios', 'button-primary', 'save_cronjobs');
+        echo '</form>';
+        // Procesar guardado
+        if (isset($_POST['save_cronjobs']) && current_user_can('manage_woocommerce')) {
+            foreach ($cronjobs as $cron) {
+                $id = $cron['id'];
+                // Guardar activación
+                $enabled_val = isset($_POST['cron_enabled'][$id]) && $_POST['cron_enabled'][$id] === '1' ? '1' : '0';
+                update_option('wc4agc_cron_' . $id . '_enabled', $enabled_val);
+                // Guardar frecuencia
+                $freq_val = isset($_POST['cron_freq'][$id]) ? max(1, intval($_POST['cron_freq'][$id])) : 1;
+                update_option('wc4agc_cron_' . $id . '_freq', $freq_val);
+                // Guardar unidad
+                $unit_val = isset($_POST['cron_unit'][$id]) && in_array($_POST['cron_unit'][$id], array_keys($units)) ? $_POST['cron_unit'][$id] : 'hours';
+                update_option('wc4agc_cron_' . $id . '_unit', $unit_val);
+            }
+            // Redirigir para evitar reenvío y refrescar valores
+            echo '<script>window.location = "' . esc_url_raw(admin_url('admin.php?page=wc4agc-integration&tab=cronjobs')) . '";</script>';
+            exit;
+        }
     }
 
     public function cleanup_old_logs() {

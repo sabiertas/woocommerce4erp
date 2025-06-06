@@ -491,4 +491,91 @@ select, input[type="text"], input[type="url"] {
 }
 .wc4agc-switch input:checked + .wc4agc-slider:before {
   transform: translateX(22px);
+}
+
+/* Cronjobs panel */
+.wc4agc-cronjobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-bottom: 32px;
+}
+.wc4agc-cronjob-item {
+  background: #fff;
+  border: 1.5px solid #ececec;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px 0 rgba(0,0,0,0.03);
+  padding: 24px 32px 18px 32px;
+  margin-bottom: 0;
+  transition: box-shadow 0.2s, border 0.2s;
+}
+.wc4agc-cronjob-item:hover {
+  box-shadow: 0 4px 16px 0 rgba(26,35,126,0.08);
+  border: 1.5px solid #FF9800;
+}
+.wc4agc-badge {
+  display: inline-block;
+  background: #e0e0e0;
+  color: #555;
+  font-size: 0.92em;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 3px 14px;
+  margin-left: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.01em;
+}
+.wc4agc-badge-soon {
+  background: #ffe082;
+  color: #b26a00;
+  border: 1px solid #ffd54f;
+}
+.wc4agc-badge-on {
+  background: #e3fcec;
+  color: #1b5e20;
+  border: 1px solid #43b36a;
+}
+.wc4agc-badge-off {
+  background: #ffebee;
+  color: #b71c1c;
+  border: 1px solid #ffcdd2;
+}
+
+.button.wc4agc-delete-logs {
+  background: #d32f2f !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 600;
+  font-size: 1em;
+  padding: 10px 24px;
+  box-shadow: 0 1px 4px 0 rgba(211,47,47,0.08);
+  transition: background 0.2s, color 0.2s;
+  margin-left: auto;
+}
+.button.wc4agc-delete-logs:hover {
+  background: #b71c1c !important;
+  color: #fff !important;
+}
+
+.wc4agc-cronjobs-list select {
+  height: 36px;
+  min-height: 36px;
+  font-size: 1em;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  padding: 0 10px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.wc4agc-cronjobs-list input[type="number"] {
+  height: 36px;
+  min-height: 36px;
+  font-size: 1em;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  padding: 0 10px;
+  vertical-align: middle;
 } 
