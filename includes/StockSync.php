@@ -27,49 +27,47 @@ class StockSync {
         self::init();
         $debug = get_option(\WC4AGC\Constants::OPTION_DEBUG_MODE, '0') === '1';
         try {
-            self::$logger->log('stock', 'Iniciando sincronización de stock', 'info');
-            $products = self::$erp_client->get_products();
-            if (!$products || !is_array($products)) {
-                $msg = 'No se pudieron obtener los productos del ERP';
-                if ($debug) {
-                    $msg .= ' | Consulta: get_products()';
-                }
-                throw new \Exception($msg);
-            }
+            self::$logger->log('stock', 'Iniciando sincronización de stock (uno a uno por SKU, solo campos necesarios)', 'info');
             $updated = 0;
             $skipped = 0;
             $errors = 0;
             $error_msgs = [];
-            foreach ($products as $product) {
+
+            $args = [
+                'post_type' => ['product', 'product_variation'],
+                'posts_per_page' => -1,
+                'fields' => 'ids',
+            ];
+            $products = get_posts($args);
+            foreach ($products as $product_id) {
+                $wc_product = wc_get_product($product_id);
+                if (!$wc_product) continue;
+                $sku = $wc_product->get_sku();
+                if (empty($sku)) {
+                    $skipped++;
+                    continue;
+                }
                 try {
-                    $sku = $product[1] ?? null;
-                    $stock = isset($product[42]) ? intval($product[42]) : null;
-                    if (empty($sku) || $stock === null) {
-                        $msg = sprintf('Registro de stock omitido: SKU vacío o stock inválido', $sku ?? 'N/A');
+                    // Solo pedir campos necesarios: 1 (SKU), 42 (stock)
+                    $erp_product = self::$erp_client->get_product($sku, [1, 42]);
+                    if (!$erp_product) {
+                        $msg = 'Producto SKU ' . $sku . ' no encontrado en ERP';
                         if ($debug) {
-                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                            $msg .= ' | Consulta: get_product(' . $sku . ')';
                         }
                         self::$logger->log('stock', $msg, 'warning');
                         $skipped++;
                         continue;
                     }
-                    $product_id = wc_get_product_id_by_sku($sku);
-                    if (!$product_id) {
-                        $msg = sprintf('Producto SKU %s no encontrado en WooCommerce', $sku);
+                    $stock = isset($erp_product[42]) ? intval($erp_product[42]) : null;
+                    if ($stock === null) {
+                        $msg = sprintf('Registro de stock omitido: SKU %s sin stock válido', $sku);
                         if ($debug) {
-                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                            $msg .= ' | Consulta: get_product(' . $sku . ')';
                         }
                         self::$logger->log('stock', $msg, 'warning');
                         $skipped++;
                         continue;
-                    }
-                    $wc_product = wc_get_product($product_id);
-                    if (!$wc_product) {
-                        $msg = "No se pudo cargar el producto ID: $product_id";
-                        if ($debug) {
-                            $msg .= ' | SKU: ' . $sku . ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
-                        }
-                        throw new \Exception($msg);
                     }
                     $wc_product->set_stock_quantity($stock);
                     $wc_product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
@@ -78,9 +76,9 @@ class StockSync {
                     self::$logger->log('stock', sprintf('Stock actualizado para SKU %s: %d unidades', $sku, $stock), 'info');
                     $updated++;
                 } catch (\Exception $e) {
-                    $msg = sprintf('Error al actualizar stock SKU %s: %s', $sku ?? 'N/A', $e->getMessage());
+                    $msg = sprintf('Error al actualizar stock SKU %s: %s', $sku, $e->getMessage());
                     if ($debug) {
-                        $msg .= isset($product) ? ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()' : '';
+                        $msg .= ' | Consulta: get_product(' . $sku . ')';
                     }
                     self::$logger->log('stock', $msg, 'error');
                     $errors++;

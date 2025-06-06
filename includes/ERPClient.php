@@ -104,12 +104,16 @@ class ERPClient {
 
     /**
      * Obtener un producto por SKU
+     * @param string $sku
+     * @param array|null $fields
+     * @return array|false
      */
-    public function get_product($sku) {
+    public function get_product($sku, $fields = null) {
         $table = $this->erp_tables['products'];
+        $campos = $fields ? $fields : $table['fields'];
         $params = [
             'Tabla'    => $table['table'],
-            'Campos'   => json_encode([$table['fields']]),
+            'Campos'   => json_encode([$campos]),
             'Texto'    => $sku,
             'CamposB'  => $table['search_field'],
             'token'    => $this->api_key,

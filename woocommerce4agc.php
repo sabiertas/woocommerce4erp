@@ -99,13 +99,23 @@ final class WC4AGC_Plugin {
         if ('woocommerce_page_wc4agc-integration' !== $hook) {
             return;
         }
-
         wp_enqueue_style(
             'wc4agc-admin',
             plugins_url('assets/css/admin.css', __FILE__),
             [],
             filemtime(plugin_dir_path(__FILE__) . 'assets/css/admin.css')
         );
+        wp_enqueue_script(
+            'wc4agc-admin',
+            plugins_url('assets/js/admin.js', __FILE__),
+            ['jquery'],
+            filemtime(plugin_dir_path(__FILE__) . 'assets/js/admin.js'),
+            true
+        );
+        wp_localize_script('wc4agc-admin', 'wc4agc_ajax', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('wc4agc_sync'),
+        ]);
     }
 
     public function register_settings() {
@@ -224,12 +234,17 @@ final class WC4AGC_Plugin {
     public function register_admin_page() {
         add_submenu_page(
             'woocommerce',
-            'AGC Integración',
-            'AGC Integración',
+            'WooCommerce4AGC',
+            'WooCommerce4AGC',
             'manage_woocommerce',
             'wc4agc-integration',
             [ $this, 'render_admin_page' ]
         );
+        // Registrar AJAX
+        add_action('wp_ajax_wc4agc_sync_stock', [ $this, 'ajax_sync_stock' ]);
+        add_action('wp_ajax_wc4agc_sync_prices', [ $this, 'ajax_sync_prices' ]);
+        add_action('wp_ajax_wc4agc_sync_products', [ $this, 'ajax_sync_products' ]);
+        add_action('wp_ajax_wc4agc_sync_categories', [ $this, 'ajax_sync_categories' ]);
     }
 
     public function render_admin_page() {
@@ -281,75 +296,25 @@ final class WC4AGC_Plugin {
         $sync_summary = null;
         echo '<div class="wc4agc-dashboard-cards">';
         foreach ([
-            ['update','Sincronizar stock','sync_stock',Constants::NONCE_SYNC_STOCK,'Obtener stock desde ERP a WooCommerce'],
-            ['tag','Sincronizar precios','sync_prices',Constants::NONCE_SYNC_PRICES,'Obtener precios desde ERP a WooCommerce'],
-            ['products','Sincronizar productos','sync_products',Constants::NONCE_SYNC_PRODUCTS,'Obtener productos desde ERP a WooCommerce'],
-            ['category','Sincronizar categorías','sync_categories',Constants::NONCE_SYNC_CATEGORIES,'Obtener categorías desde ERP a WooCommerce'],
-        ] as list($icon,$label,$action,$nonce,$desc)) {
-            echo '<div class="wc4agc-dashboard-card">';
+            ['update','Sincronizar stock','sync_stock','stock','Obtener stock desde ERP a WooCommerce'],
+            ['tag','Sincronizar precios','sync_prices','prices','Obtener precios desde ERP a WooCommerce'],
+            ['products','Sincronizar productos','sync_products','products','Obtener productos desde ERP a WooCommerce'],
+            ['category','Sincronizar categorías','sync_categories','categories','Obtener categorías desde ERP a WooCommerce'],
+        ] as list($icon,$label,$action,$sync_id,$desc)) {
+            echo '<div class="wc4agc-dashboard-card" id="wc4agc-card-'.$sync_id.'" style="position:relative;">';
+            // Overlay spinner
+            echo '<div class="wc4agc-dashboard-overlay" id="wc4agc-overlay-'.$sync_id.'" style="display:none;">';
+            echo '<div class="wc4agc-dashboard-spinner active"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#FF9800" stroke-width="5" stroke-linecap="round" stroke-dasharray="90 150"/></svg></div>';
+            echo '<div style="margin:18px 24px 0 0;font-weight:600;color:#1A237E;font-size:1.08em;">Sincronizando... Esto puede tardar</div>';
+            echo '</div>';
             echo '<span class="dashicons dashicons-' . esc_attr($icon) . '"></span>';
             echo '<h3>' . esc_html($label) . '</h3>';
             echo '<p>' . esc_html($desc) . '</p>';
-            echo '<form method="post">';
-            wp_nonce_field($action, $nonce);
-            echo '<input type="hidden" name="' . esc_attr($action) . '" value="1" />';
-            submit_button('Ejecutar', 'button-primary', $action, false);
-            echo '</form></div>';
+            echo '<button type="button" class="button button-primary wc4agc-sync-btn" data-sync="' . esc_attr($sync_id) . '" id="wc4agc-btn-'.$sync_id.'">Ejecutar</button>';
+            echo '<div class="wc4agc-sync-result" id="wc4agc-result-'.$sync_id.'" style="margin-top:12px;"></div>';
+            echo '</div>';
         }
         echo '</div>';
-
-        // Procesar acciones
-        if (isset($_POST['sync_stock']) && check_admin_referer('sync_stock', Constants::NONCE_SYNC_STOCK)) {
-            $sync_summary = StockSync::sync_all();
-            $this->logger->log('stock', 'Sincronización de stock iniciada manualmente', 'info');
-            echo '<div class="updated notice notice-success wc4agc-notice"><p>Stock sincronizado.</p></div>';
-        }
-
-        if (isset($_POST['sync_prices']) && check_admin_referer('sync_prices', Constants::NONCE_SYNC_PRICES)) {
-            $sync_summary = PriceSync::sync_all();
-            $this->logger->log('prices', 'Sincronización de precios iniciada manualmente', 'info');
-            echo '<div class="updated notice notice-success wc4agc-notice"><p>Precios sincronizados.</p></div>';
-        }
-
-        if (isset($_POST['sync_products']) && check_admin_referer('sync_products', Constants::NONCE_SYNC_PRODUCTS)) {
-            if (class_exists(ProductSync::class)) {
-                $sync_summary = ProductSync::sync_all();
-                $this->logger->log('products', 'Sincronización de productos iniciada manualmente', 'info');
-                echo '<div class="updated notice notice-success wc4agc-notice"><p>Productos sincronizados.</p></div>';
-            } else {
-                echo '<div class="error notice notice-error wc4agc-notice"><p>Módulo productos no implementado.</p></div>';
-            }
-        }
-
-        if (isset($_POST['sync_categories']) && check_admin_referer('sync_categories', Constants::NONCE_SYNC_CATEGORIES)) {
-            if (class_exists(CategorySync::class)) {
-                $sync_summary = CategorySync::sync_all();
-                $this->logger->log('categories', 'Sincronización de categorías iniciada manualmente', 'info');
-                echo '<div class="updated notice notice-success wc4agc-notice"><p>Categorías sincronizadas.</p></div>';
-            } else {
-                echo '<div class="error notice notice-error wc4agc-notice"><p>Módulo categorías no implementado.</p></div>';
-            }
-        }
-
-        // Mostrar resumen si debug activo y hay resultado
-        if ($debug && is_array($sync_summary)) {
-            echo '<div class="wc4agc-settings-section" style="margin-top:24px;">';
-            echo '<div class="notice notice-info wc4agc-notice" style="font-size:1.08em;">';
-            echo '<strong>Resumen de sincronización:</strong><br/>';
-            foreach ($sync_summary as $k => $v) {
-                if ($k === 'error_msgs' && is_array($v) && count($v) > 0) {
-                    echo '<br/><strong>Errores:</strong><ul style="margin:0 0 0 18px;">';
-                    foreach ($v as $err) {
-                        echo '<li style="font-size:0.97em;">' . esc_html($err) . '</li>';
-                    }
-                    echo '</ul>';
-                } elseif ($k !== 'error_msgs') {
-                    echo esc_html(ucfirst($k)) . ': <strong>' . esc_html(is_bool($v) ? ($v ? 'Sí' : 'No') : $v) . '</strong><br/>';
-                }
-            }
-            echo '</div>';
-            echo '</div>';
-        }
     }
 
     private function render_settings_tab() {
@@ -688,6 +653,28 @@ final class WC4AGC_Plugin {
 
     public function handle_order_sync($order_id) {
         \WC4AGC\OrderSync::send_to_erp($order_id);
+    }
+
+    // AJAX handlers
+    public function ajax_sync_stock() {
+        check_ajax_referer('wc4agc_sync', 'nonce');
+        $result = \WC4AGC\StockSync::sync_all();
+        wp_send_json_success($result);
+    }
+    public function ajax_sync_prices() {
+        check_ajax_referer('wc4agc_sync', 'nonce');
+        $result = \WC4AGC\PriceSync::sync_all();
+        wp_send_json_success($result);
+    }
+    public function ajax_sync_products() {
+        check_ajax_referer('wc4agc_sync', 'nonce');
+        $result = \WC4AGC\ProductSync::sync_all();
+        wp_send_json_success($result);
+    }
+    public function ajax_sync_categories() {
+        check_ajax_referer('wc4agc_sync', 'nonce');
+        $result = \WC4AGC\CategorySync::sync_all();
+        wp_send_json_success($result);
     }
 }
 

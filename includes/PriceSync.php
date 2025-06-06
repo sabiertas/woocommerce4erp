@@ -27,57 +27,55 @@ class PriceSync {
         self::init();
         $debug = get_option(\WC4AGC\Constants::OPTION_DEBUG_MODE, '0') === '1';
         try {
-            self::$logger->log('prices', 'Iniciando sincronización de precios', 'info');
-            $products = self::$erp_client->get_products();
-            if (!$products || !is_array($products)) {
-                $msg = 'No se pudieron obtener los productos del ERP';
-                if ($debug) {
-                    $msg .= ' | Consulta: get_products()';
-                }
-                throw new \Exception($msg);
-            }
+            self::$logger->log('prices', 'Iniciando sincronización de precios (uno a uno por SKU, solo campos necesarios)', 'info');
             $updated = 0;
             $skipped = 0;
             $errors = 0;
             $error_msgs = [];
-            foreach ($products as $product) {
+
+            $args = [
+                'post_type' => ['product', 'product_variation'],
+                'posts_per_page' => -1,
+                'fields' => 'ids',
+            ];
+            $products = get_posts($args);
+            foreach ($products as $product_id) {
+                $wc_product = wc_get_product($product_id);
+                if (!$wc_product) continue;
+                $sku = $wc_product->get_sku();
+                if (empty($sku)) {
+                    $skipped++;
+                    continue;
+                }
                 try {
-                    $sku = $product[1] ?? null;
-                    $price_usd = isset($product[75]) ? floatval($product[75]) : null;
-                    $parent_sku = $product[46] ?? null;
-                    if (empty($sku) || $price_usd === null || $price_usd <= 0) {
-                        $msg = sprintf('Producto SKU %s omitido: SKU vacío o precio en dólares inválido', $sku ?? 'N/A');
+                    // Solo pedir campos necesarios: 1 (SKU), 46 (parent_sku), 75 (precio USD)
+                    $erp_product = self::$erp_client->get_product($sku, [1, 46, 75]);
+                    if (!$erp_product) {
+                        $msg = 'Producto SKU ' . $sku . ' no encontrado en ERP';
                         if ($debug) {
-                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                            $msg .= ' | Consulta: get_product(' . $sku . ')';
                         }
                         self::$logger->log('prices', $msg, 'warning');
                         $skipped++;
                         continue;
                     }
-                    $product_id = wc_get_product_id_by_sku($sku);
-                    if (!$product_id) {
-                        $msg = sprintf('Producto SKU %s no encontrado en WooCommerce', $sku);
+                    $price_usd = isset($erp_product[75]) ? floatval($erp_product[75]) : null;
+                    $parent_sku = $erp_product[46] ?? null;
+                    if ($price_usd === null || $price_usd <= 0) {
+                        $msg = sprintf('Producto SKU %s omitido: precio en dólares inválido', $sku);
                         if ($debug) {
-                            $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                            $msg .= ' | Consulta: get_product(' . $sku . ')';
                         }
                         self::$logger->log('prices', $msg, 'warning');
                         $skipped++;
                         continue;
-                    }
-                    $wc_product = wc_get_product($product_id);
-                    if (!$wc_product) {
-                        $msg = "No se pudo cargar el producto ID: $product_id";
-                        if ($debug) {
-                            $msg .= ' | SKU: ' . $sku . ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
-                        }
-                        throw new \Exception($msg);
                     }
                     if ($wc_product->is_type('variation') && $parent_sku) {
                         $parent_id = wc_get_product_id_by_sku($parent_sku);
                         if (!$parent_id || $parent_id !== $wc_product->get_parent_id()) {
                             $msg = sprintf('Variación SKU %s omitida: SKU padre no coincide', $sku);
                             if ($debug) {
-                                $msg .= ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()';
+                                $msg .= ' | Consulta: get_product(' . $sku . ')';
                             }
                             self::$logger->log('prices', $msg, 'warning');
                             $skipped++;
@@ -90,9 +88,9 @@ class PriceSync {
                     self::$logger->log('prices', sprintf('Precio actualizado para SKU %s: $%.2f', $sku, $price_usd), 'info');
                     $updated++;
                 } catch (\Exception $e) {
-                    $msg = sprintf('Error al actualizar producto SKU %s: %s', $sku ?? 'N/A', $e->getMessage());
+                    $msg = sprintf('Error al actualizar producto SKU %s: %s', $sku, $e->getMessage());
                     if ($debug) {
-                        $msg .= isset($product) ? ' | Datos: ' . json_encode($product) . ' | Consulta: get_products()' : '';
+                        $msg .= ' | Consulta: get_product(' . $sku . ')';
                     }
                     self::$logger->log('prices', $msg, 'error');
                     $errors++;

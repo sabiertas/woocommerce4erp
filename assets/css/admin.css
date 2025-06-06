@@ -578,4 +578,45 @@ select, input[type="text"], input[type="url"] {
   background: #fafafa;
   padding: 0 10px;
   vertical-align: middle;
+}
+
+.wc4agc-dashboard-spinner {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+  z-index: 10;
+  display: none;
+}
+.wc4agc-dashboard-spinner.active {
+  display: block;
+}
+.wc4agc-dashboard-spinner svg {
+  width: 100%;
+  height: 100%;
+  animation: wc4agc-spin 1s linear infinite;
+}
+@keyframes wc4agc-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.wc4agc-dashboard-card.syncing {
+  pointer-events: none;
+  opacity: 0.65;
+}
+.wc4agc-dashboard-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(255,255,255,0.7);
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  border-radius: 16px;
+}
+.wc4agc-dashboard-overlay .wc4agc-dashboard-spinner {
+  display: block;
+  margin: 18px 18px 0 0;
 } 
