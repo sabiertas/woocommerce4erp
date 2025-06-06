@@ -54,7 +54,7 @@ body.wp-admin {
     color: #6b7280 !important;
     border: none !important;
     border-radius: 0 !important;
-    font-size: 0.85em;
+    font-size: 0.9rem;
     font-weight: 500;
     margin-bottom: 0;
     padding: 0 16px 6px 16px;
@@ -93,17 +93,20 @@ body.wp-admin {
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 36px;
     margin: 0 0 36px 0;
-    margin-left: 0;
-    margin-right: 0;
+    align-items: stretch;
 }
 .wc4agc-dashboard-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    height: 100% !important;
+    min-height: 260px !important;
+    box-sizing: border-box;
     background: #fff;
+    border: 1.5px solid #e0e3ea;
     border-radius: 16px;
     box-shadow: 0 4px 24px 0 rgba(26,35,126,0.08);
     padding: 36px 24px 24px 24px;
-    min-height: 240px;
-    border: 1.5px solid #e0e3ea;
-    transition: box-shadow 0.2s, border 0.2s, transform 0.15s;
     position: relative;
 }
 .wc4agc-dashboard-card:hover {
@@ -122,17 +125,20 @@ body.wp-admin {
 .wc4agc-dashboard-card h3 {
     font-size: 1.18em;
     font-weight: 900;
-    margin-bottom: 10px;
+    margin-bottom: 4px;
+    min-height: 1rem;
 }
 .wc4agc-dashboard-card p {
     font-size: 1.04em;
-    margin-bottom: 18px;
+    margin-bottom: 12px;
+    margin-top: 0;
+    min-height: 1rem;
 }
-.wc4agc-dashboard-card .button {
-    min-width: 140px;
-    height: 48px;
-    font-size: 1.04em !important;
-    border-radius: 10px !important;
+.wc4agc-dashboard-card form {
+    margin-top: auto !important;
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
 }
 
 /* Botones corporativos */
@@ -203,7 +209,7 @@ select, input[type="text"], input[type="url"] {
     width: 100%;
     height: 1px;
     background: #ececec;
-    box-shadow: 0 2px 8px 0 rgba(26,35,126,0.07);
+    box-shadow: 2px 4px 10px 0 rgba(26, 35, 126, 0.25);
     margin: 36px 0 36px 0;
     border-radius: 1px;
 }
@@ -408,4 +414,27 @@ select, input[type="text"], input[type="url"] {
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
+}
+
+/* Alinear verticalmente los inputs con las etiquetas en la tabla de ajustes */
+.form-table th {
+    vertical-align: middle !important;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    font-weight: 600;
+    color: #22223b;
+    font-size: 1em;
+}
+.form-table td {
+    vertical-align: middle !important;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+}
+.form-table input[type="text"],
+.form-table input[type="url"] {
+    height: 36px !important;
+    min-height: 36px !important;
+    display: inline-flex;
+    align-items: center;
+    font-size: 1em;
 } 
