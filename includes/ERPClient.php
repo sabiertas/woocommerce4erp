@@ -114,7 +114,8 @@ class ERPClient {
             'CamposB'  => $table['search_field'],
             'token'    => $this->api_key,
         ];
-        $result = $this->request('GET', 'listado', ['query' => $params]);
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        $result = $this->request('GET', 'listado?' . $query);
         if (!$result || !isset($result['data']) || empty($result['data'])) {
             return false;
         }
@@ -133,7 +134,8 @@ class ERPClient {
             'CamposB'  => $table['search_field'],
             'token'    => $this->api_key,
         ];
-        $result = $this->request('GET', 'listado', ['query' => $params]);
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        $result = $this->request('GET', 'listado?' . $query);
         if (!$result || !isset($result['data'])) {
             return [];
         }
